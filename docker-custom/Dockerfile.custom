@@ -17,8 +17,10 @@ RUN set -ex && \
         curl \
         nano \
         git \
+        openblas-dev \
+        openssl \
         openssh-client && \
-    mkdir -p /usr/src/node-red /data && \
+    mkdir -p /usr/src/node-red/nodecerts /data && \
     deluser --remove-home node && \
     adduser -h /usr/src/node-red -D -H node-red -u 1000 && \
     chown -R node-red:node-red /data && \
@@ -37,8 +39,9 @@ FROM base AS build
 RUN apk add --no-cache --virtual buildtools build-base linux-headers udev python && \
     npm install --unsafe-perm --no-update-notifier --only=production && \
     /tmp/remove_native_gpio.sh && \
+    openssl genrsa -out /usr/src/node-red/nodecerts/node-key.pem 2048 && openssl req -new -sha256 -key /usr/src/node-red/nodecerts/node-key.pem -out /usr/src/node-red/nodecerts/node-csr.pem -subj "/C=ES/ST=Andalucia/L=Sevilla/O=ACME S.A./OU=Watson/CN=dockerwatson.acme.org/emailAddress=jimbotel@gmail.com" && openssl x509 -req -in /usr/src/node-red/nodecerts/node-csr.pem -signkey /usr/src/node-red/nodecerts/node-key.pem -out /usr/src/node-red/nodecerts/node-cert.pem && \
     cp -R node_modules prod_node_modules
-
+ 
 #### Stage RELEASE #####################################################################################################
 FROM base AS RELEASE
 ARG BUILD_DATE
@@ -62,9 +65,13 @@ LABEL org.label-schema.build-date=${BUILD_DATE} \
     authors="Dave Conway-Jones, Nick O'Leary, James Thomas, Raymond Mouthaan"
 
 COPY --from=build /usr/src/node-red/prod_node_modules ./node_modules
+COPY --from=build /usr/src/node-red/nodecerts ./nodecerts
+COPY ./settings.tjbot.js /data/settings.js
+COPY ./flows.json /data/flows.json
 
 # Chown, install devtools & Clean up
 RUN chown -R node-red:node-red /usr/src/node-red && \
+    chown node-red:node-red /data/settings.js /data/flows.json && \
     /tmp/install_devtools.sh && \
     rm /tmp/*
 
@@ -85,6 +92,7 @@ VOLUME ["/data"]
 EXPOSE 1880
 
 # Add a healthcheck (default every 30 secs)
-HEALTHCHECK CMD curl http://localhost:1880/ || exit 1
+# HEALTHCHECK CMD curl http://localhost:1880/ || exit 1
+HEALTHCHECK CMD ps -ef | sed 's#^.*node-red  ##' | grep node-red | grep -v grep || exit 1
 
 ENTRYPOINT ["npm", "start", "--", "--userDir", "/data"]
