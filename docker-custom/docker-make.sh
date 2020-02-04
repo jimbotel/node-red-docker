@@ -13,4 +13,4 @@ docker build --no-cache \
     --build-arg BUILD_DATE="$(date +"%Y-%m-%dT%H:%M:%SZ")" \
     --build-arg TAG_SUFFIX=default \
     --file Dockerfile.custom \
-    --tag tjbotv:v3 .
+    --tag tjbotv:v4 .
